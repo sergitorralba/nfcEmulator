@@ -18,7 +18,10 @@ A developer tool and Android application designed to emulate an EMV Point-of-Sal
 
 ## ✨ Features
 
-- **Standard Contactless EMV Engine**: Implements ISO/IEC 7816-4 APDU commands, PPSE selection (`2PAY.SYS.DDF01`), AID negotiation (Visa, Mastercard), and GPO (`GET PROCESSING OPTIONS`).
+- **Standard Contactless EMV Engine**: Implements ISO/IEC 7816-4 APDU commands, PPSE selection (`2PAY.SYS.DDF01`), dynamic AID negotiation, and GPO (`GET PROCESSING OPTIONS`).
+- **Broad Scheme & Standard Support**:
+  - **Major Schemes**: Visa (`A0000000031010`) & Mastercard (`A0000000041010`).
+  - **Domestic & White Label**: IDEMIA WISE, White Label Alliance (WLA), and European CPACE (`A0000008430101`, `A0000008580101`) with dynamic PPSE auto-discovery and direct AID selection.
 - **One-Tap Test Scenarios**:
   1. **Standard Approval**: Normal contactless payment with online cryptogram request (`9000`).
   2. **Approval with CDCVM**: Signals Terminal Transaction Qualifiers (TTQ) requiring Consumer Device Cardholder Verification Method (biometric unlock / device passcode).
@@ -27,7 +30,8 @@ A developer tool and Android application designed to emulate an EMV Point-of-Sal
   5. **Cryptogram Decline (`AAC`)**: Generates an Application Authentication Cryptogram (AAC) decline.
   6. **Simulated RF Tear**: Prematurely drops the connection mid-flight (`isoDep.close()`) to test wallet resilience to tap-and-pull edge cases.
   7. **Terminal Stall / Timeout**: Holds the RF field open with an artificial delay to test wallet timeout handling.
-  8. **Unsupported Card**: Refuses the credential with `6A 82` (Application not found).
+  8. **WISE / WLA (Direct AID)**: Directly selects CPACE / White Label Alliance domestic AID without requiring PPSE directory lookup.
+  9. **Unsupported Card**: Refuses the credential with `6A 82` (Application not found).
 - **Fail-Safe Testing UX**:
   - Direct controls for **"Restart Tap Session"** and **"Cancel / Back to Menu"** so an unstable wallet build never locks up the testing device.
 - **Raw APDU Hex Inspector**:
