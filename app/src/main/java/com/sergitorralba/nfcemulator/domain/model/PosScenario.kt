@@ -29,6 +29,10 @@ enum class ScenarioType(val title: String, val description: String) {
         title = "Terminal Stall / Timeout",
         description = "Terminal halts communication mid-transaction without closing, testing wallet timeout handling."
     ),
+    WISE_WLA_DIRECT_SELECT(
+        title = "WISE / WLA (Direct AID)",
+        description = "Selects CPACE / White Label Alliance domestic AID directly without PPSE."
+    ),
     UNSUPPORTED_CARD(
         title = "Unsupported Card / AID",
         description = "Terminal rejects card with 6A82 (Application not found)."
@@ -38,5 +42,6 @@ enum class ScenarioType(val title: String, val description: String) {
 data class PosScenario(
     val type: ScenarioType,
     val amount: Long = 1000L, // $10.00 in minor currency units (cents)
-    val currencyCode: String = "0840" // USD (840)
+    val currencyCode: String = "0840", // USD (840) or "0978" for EUR
+    val customAidHex: String? = null // Optional explicit AID override (e.g. for WISE / WLA)
 )

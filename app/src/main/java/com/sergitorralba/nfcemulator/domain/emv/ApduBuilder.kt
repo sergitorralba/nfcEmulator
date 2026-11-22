@@ -8,6 +8,11 @@ object EmvConstants {
     val VISA_AID: ByteArray = HexUtil.fromHex("A0000000031010")
     val MASTERCARD_AID: ByteArray = HexUtil.fromHex("A0000000041010")
 
+    // White Label Alliance (WLA) / CPACE / WISE AIDs
+    val CPACE_DEBIT_AID: ByteArray = HexUtil.fromHex("A0000008430101")
+    val CPACE_CREDIT_AID: ByteArray = HexUtil.fromHex("A0000008430201")
+    val WLA_DOMESTIC_AID: ByteArray = HexUtil.fromHex("A0000008580101")
+
     // Common EMV Status Words
     const val SW_SUCCESS = "9000"
     const val SW_CONDITIONS_NOT_SATISFIED = "6985"

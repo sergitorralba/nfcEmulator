@@ -154,6 +154,7 @@ fun ScenarioCard(
                     ScenarioType.DECLINE_CONDITIONS, ScenarioType.DECLINE_AAC -> Icons.Default.Cancel
                     ScenarioType.RF_TEAR -> Icons.Default.FlashOff
                     ScenarioType.STALLED_TIMEOUT -> Icons.Default.HourglassTop
+                    ScenarioType.WISE_WLA_DIRECT_SELECT -> Icons.Default.AccountBalance
                     ScenarioType.UNSUPPORTED_CARD -> Icons.Default.CreditCardOff
                 },
                 contentDescription = null,

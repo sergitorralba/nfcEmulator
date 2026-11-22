@@ -27,6 +27,7 @@ class ScenarioExecutor(
                 ScenarioType.DECLINE_AAC -> executeDeclineAac(isoDep, scenario)
                 ScenarioType.RF_TEAR -> executeRfTear(isoDep, scenario)
                 ScenarioType.STALLED_TIMEOUT -> executeStalledTimeout(isoDep, scenario)
+                ScenarioType.WISE_WLA_DIRECT_SELECT -> executeWiseWlaDirect(isoDep, scenario)
                 ScenarioType.UNSUPPORTED_CARD -> executeUnsupportedCard(isoDep, scenario)
             }
         } catch (e: Exception) {
@@ -75,8 +76,10 @@ class ScenarioExecutor(
             return ScenarioResult.TerminalDecline("PPSE selection rejected by card: SW=$ppseSw")
         }
 
-        // 2. Discover AID from PPSE or fallback to Visa/Mastercard
-        val selectedAid = extractAidFromPpse(ppseResp) ?: EmvConstants.VISA_AID
+        // 2. Discover AID from PPSE or fallback to Custom / Wise / Visa / Mastercard
+        val selectedAid = scenario.customAidHex?.let { HexUtil.fromHex(it) }
+            ?: extractAidFromPpse(ppseResp)
+            ?: EmvConstants.VISA_AID
 
         // 3. SELECT AID
         val selectAid = ApduBuilder.buildSelect(selectedAid)
@@ -202,6 +205,34 @@ class ScenarioExecutor(
         isoDep.close()
 
         return ScenarioResult.Timeout("Terminal stalled for 5s then released NFC link")
+    }
+
+    private suspend fun executeWiseWlaDirect(
+        isoDep: IsoDep,
+        scenario: PosScenario
+    ): ScenarioResult {
+        // Direct SELECT of WISE / CPACE / WLA AID without PPSE
+        val targetAid = scenario.customAidHex?.let { HexUtil.fromHex(it) } ?: EmvConstants.CPACE_DEBIT_AID
+        val selectAid = ApduBuilder.buildSelect(targetAid)
+        val (aidResp, aidSw) = transceive(isoDep, selectAid, "DIRECT SELECT WISE/WLA AID (${HexUtil.toHex(targetAid)})")
+
+        if (aidSw != EmvConstants.SW_SUCCESS) {
+            return ScenarioResult.TerminalDecline("WISE/WLA AID (${HexUtil.toHex(targetAid)}) rejected: SW=$aidSw")
+        }
+
+        // GPO
+        val pdolData = ApduBuilder.buildDefaultPdolValues(
+            amount = scenario.amount,
+            currencyCodeHex = scenario.currencyCode
+        )
+        val gpo = ApduBuilder.buildGpo(pdolData)
+        val (gpoResp, gpoSw) = transceive(isoDep, gpo, "GPO (WISE/CPACE Kernel)")
+
+        return if (gpoSw == EmvConstants.SW_SUCCESS) {
+            ScenarioResult.Success("WISE / WLA Transaction Approved directly on AID ${HexUtil.toHex(targetAid)}")
+        } else {
+            ScenarioResult.CardDecline("WISE / WLA card returned GPO status: $gpoSw")
+        }
     }
 
     private suspend fun executeUnsupportedCard(
