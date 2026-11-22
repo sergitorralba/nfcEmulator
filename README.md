@@ -2,6 +2,20 @@
 
 A developer tool and Android application designed to emulate an EMV Point-of-Sale (POS) contactless reader. Built to thoroughly test NFC mobile wallets (Apple Pay, Google Wallet, custom HCE wallets) across realistic terminal scenarios, step-ups, declines, and failure recovery.
 
+---
+
+## 📱 Screenshots
+
+<div align="center">
+  <img src="docs/screenshots/scenario_selection.jpg" width="30%" alt="Scenario Selection Screen" />
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/screenshots/ready_to_tap.jpg" width="30%" alt="Ready to Tap Screen" />
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/screenshots/transaction_result.jpg" width="30%" alt="Transaction Result Screen" />
+</div>
+
+---
+
 ## ✨ Features
 
 - **Standard Contactless EMV Engine**: Implements ISO/IEC 7816-4 APDU commands, PPSE selection (`2PAY.SYS.DDF01`), AID negotiation (Visa, Mastercard), and GPO (`GET PROCESSING OPTIONS`).
@@ -19,6 +33,17 @@ A developer tool and Android application designed to emulate an EMV Point-of-Sal
 - **Raw APDU Hex Inspector**:
   - Live modal sheet showing every command and response APDU byte array and status words for debugging.
 
+---
+
+## 📦 Releases & APK Downloads
+
+Pre-built APKs are automatically generated for each release and build:
+
+- **Latest Stable Release**: Download `app-debug.apk` directly from the [GitHub Releases](https://github.com/sergitorralba/nfcEmulator/releases) page.
+- **Continuous Integration**: Every push to `main` compiles an APK artifact accessible under the [GitHub Actions](https://github.com/sergitorralba/nfcEmulator/actions) tab.
+
+---
+
 ## 🛠 Tech Stack
 
 - **Platform**: Android (`minSdk 26`, `compileSdk 34`)
@@ -26,6 +51,8 @@ A developer tool and Android application designed to emulate an EMV Point-of-Sal
 - **UI**: Jetpack Compose + Material 3
 - **NFC Engine**: `NfcAdapter.enableReaderMode` + `IsoDep.transceive()`
 - **Architecture**: Clean Architecture + MVI (`PosViewModel` $\to$ `NfcTerminalManager` $\to$ `ScenarioExecutor`)
+
+---
 
 ## 🚀 Getting Started
 
