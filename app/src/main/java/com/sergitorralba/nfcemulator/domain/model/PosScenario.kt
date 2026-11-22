@@ -39,9 +39,17 @@ enum class ScenarioType(val title: String, val description: String) {
     )
 }
 
+enum class TargetCardScheme(val title: String, val defaultAidHex: String? = null) {
+    AUTO_PPSE(title = "Auto (PPSE Discover)", defaultAidHex = null),
+    WISE_CPACE(title = "WISE / CPACE", defaultAidHex = "A0000008430101"),
+    VISA(title = "Visa", defaultAidHex = "A0000000031010"),
+    MASTERCARD(title = "Mastercard", defaultAidHex = "A0000000041010")
+}
+
 data class PosScenario(
     val type: ScenarioType,
+    val scheme: TargetCardScheme = TargetCardScheme.AUTO_PPSE,
     val amount: Long = 1000L, // $10.00 in minor currency units (cents)
     val currencyCode: String = "0840", // USD (840) or "0978" for EUR
-    val customAidHex: String? = null // Optional explicit AID override (e.g. for WISE / WLA)
+    val customAidHex: String? = null
 )

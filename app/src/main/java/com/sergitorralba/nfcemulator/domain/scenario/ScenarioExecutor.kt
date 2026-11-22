@@ -27,7 +27,7 @@ class ScenarioExecutor(
                 ScenarioType.DECLINE_AAC -> executeDeclineAac(isoDep, scenario)
                 ScenarioType.RF_TEAR -> executeRfTear(isoDep, scenario)
                 ScenarioType.STALLED_TIMEOUT -> executeStalledTimeout(isoDep, scenario)
-                ScenarioType.WISE_WLA_DIRECT_SELECT -> executeWiseWlaDirect(isoDep, scenario)
+                ScenarioType.WISE_WLA_DIRECT_SELECT -> executeApproval(isoDep, scenario, requireCdcvm = false)
                 ScenarioType.UNSUPPORTED_CARD -> executeUnsupportedCard(isoDep, scenario)
             }
         } catch (e: Exception) {
@@ -64,31 +64,46 @@ class ScenarioExecutor(
         return Pair(response, sw)
     }
 
+    /**
+     * Resolves the target AID either via user override/scheme selection or PPSE discovery.
+     */
+    private fun resolveTargetAid(isoDep: IsoDep, scenario: PosScenario): ByteArray? {
+        // 1. Direct explicit override
+        scenario.customAidHex?.let { return HexUtil.fromHex(it) }
+
+        // 2. Fixed scheme selection if not AUTO_PPSE
+        if (scenario.scheme != com.sergitorralba.nfcemulator.domain.model.TargetCardScheme.AUTO_PPSE) {
+            scenario.scheme.defaultAidHex?.let { return HexUtil.fromHex(it) }
+        }
+
+        // 3. Auto-discover from PPSE
+        val selectPpse = ApduBuilder.buildSelect(EmvConstants.PPSE_AID)
+        val (ppseResp, ppseSw) = transceive(isoDep, selectPpse, "SELECT PPSE (2PAY.SYS.DDF01)")
+        if (ppseSw == EmvConstants.SW_SUCCESS) {
+            val discoveredAid = extractAidFromPpse(ppseResp)
+            if (discoveredAid != null) return discoveredAid
+        }
+
+        // 4. Default fallback
+        return EmvConstants.VISA_AID
+    }
+
     private suspend fun executeApproval(
         isoDep: IsoDep,
         scenario: PosScenario,
         requireCdcvm: Boolean
     ): ScenarioResult {
-        // 1. SELECT PPSE
-        val selectPpse = ApduBuilder.buildSelect(EmvConstants.PPSE_AID)
-        val (ppseResp, ppseSw) = transceive(isoDep, selectPpse, "SELECT PPSE (2PAY.SYS.DDF01)")
-        if (ppseSw != EmvConstants.SW_SUCCESS) {
-            return ScenarioResult.TerminalDecline("PPSE selection rejected by card: SW=$ppseSw")
-        }
+        val selectedAid = resolveTargetAid(isoDep, scenario)
+            ?: return ScenarioResult.TerminalDecline("Failed to discover or resolve target AID")
 
-        // 2. Discover AID from PPSE or fallback to Custom / Wise / Visa / Mastercard
-        val selectedAid = scenario.customAidHex?.let { HexUtil.fromHex(it) }
-            ?: extractAidFromPpse(ppseResp)
-            ?: EmvConstants.VISA_AID
-
-        // 3. SELECT AID
+        // SELECT AID
         val selectAid = ApduBuilder.buildSelect(selectedAid)
         val (aidResp, aidSw) = transceive(isoDep, selectAid, "SELECT AID (${HexUtil.toHex(selectedAid)})")
         if (aidSw != EmvConstants.SW_SUCCESS) {
             return ScenarioResult.TerminalDecline("AID selection rejected by card: SW=$aidSw")
         }
 
-        // 4. GET PROCESSING OPTIONS (GPO)
+        // GET PROCESSING OPTIONS (GPO)
         val pdolData = ApduBuilder.buildDefaultPdolValues(
             amount = scenario.amount,
             currencyCodeHex = scenario.currencyCode,
@@ -100,7 +115,8 @@ class ScenarioExecutor(
         return if (gpoSw == EmvConstants.SW_SUCCESS) {
             val amountFormatted = "$%.2f".format(scenario.amount / 100.0)
             val cvmText = if (requireCdcvm) "with CDCVM" else "without CDCVM"
-            ScenarioResult.Success("Transaction Approved $amountFormatted ($cvmText)")
+            val schemeLabel = if (selectedAid.contentEquals(EmvConstants.CPACE_DEBIT_AID)) " [WISE/CPACE]" else ""
+            ScenarioResult.Success("Transaction Approved $amountFormatted ($cvmText)$schemeLabel")
         } else {
             ScenarioResult.CardDecline("Card rejected GPO with status: $gpoSw")
         }
@@ -110,71 +126,62 @@ class ScenarioExecutor(
         isoDep: IsoDep,
         scenario: PosScenario
     ): ScenarioResult {
-        // 1. SELECT PPSE
-        val selectPpse = ApduBuilder.buildSelect(EmvConstants.PPSE_AID)
-        val (ppseResp, _) = transceive(isoDep, selectPpse, "SELECT PPSE")
-        val aid = extractAidFromPpse(ppseResp) ?: EmvConstants.VISA_AID
+        val aid = resolveTargetAid(isoDep, scenario)
+            ?: return ScenarioResult.TerminalDecline("Failed to resolve target AID")
 
-        // 2. SELECT AID
         val selectAid = ApduBuilder.buildSelect(aid)
-        transceive(isoDep, selectAid, "SELECT AID")
+        transceive(isoDep, selectAid, "SELECT AID (${HexUtil.toHex(aid)})")
 
-        // 3. Send GPO requesting CVM
+        // Send GPO requesting CVM
         val pdol = ApduBuilder.buildDefaultPdolValues(amount = scenario.amount, requireCvm = true)
         val gpo = ApduBuilder.buildGpo(pdol)
-        val (gpoResp, gpoSw) = transceive(isoDep, gpo, "GPO (Requesting CDCVM)")
+        val (gpoResp, gpoSw) = transceive(isoDep, gpo, "GPO (Requesting CDCVM Step-Up)")
 
-        return ScenarioResult.TerminalDecline("Triggered 'See Phone' (Requires Cardholder Biometric Re-auth)")
+        return ScenarioResult.TerminalDecline("Triggered 'See Phone' (Requires Cardholder Biometric Re-auth on AID ${HexUtil.toHex(aid)})")
     }
 
     private suspend fun executeDeclineConditions(
         isoDep: IsoDep,
         scenario: PosScenario
     ): ScenarioResult {
-        // Perform PPSE and AID selection, then simulate Terminal aborting with 6985
-        val selectPpse = ApduBuilder.buildSelect(EmvConstants.PPSE_AID)
-        val (ppseResp, _) = transceive(isoDep, selectPpse, "SELECT PPSE")
-        val aid = extractAidFromPpse(ppseResp) ?: EmvConstants.VISA_AID
+        val aid = resolveTargetAid(isoDep, scenario)
+            ?: return ScenarioResult.TerminalDecline("Failed to resolve target AID")
 
         val selectAid = ApduBuilder.buildSelect(aid)
-        transceive(isoDep, selectAid, "SELECT AID")
+        transceive(isoDep, selectAid, "SELECT AID (${HexUtil.toHex(aid)})")
 
-        // Send an invalid parameter or abort condition command to trigger card decline
+        // Send invalid parameter to trigger card decline (6985)
         val invalidGpo = byteArrayOf(0x80.toByte(), 0xA8.toByte(), 0x00.toByte(), 0x00.toByte(), 0x02.toByte(), 0x83.toByte(), 0x00.toByte(), 0x00.toByte())
         val (_, sw) = transceive(isoDep, invalidGpo, "GPO (Simulating 6985 Conditions Not Satisfied)")
 
-        return ScenarioResult.TerminalDecline("Terminal declined with status word 6985")
+        return ScenarioResult.TerminalDecline("Terminal declined with status word 6985 on AID ${HexUtil.toHex(aid)}")
     }
 
     private suspend fun executeDeclineAac(
         isoDep: IsoDep,
         scenario: PosScenario
     ): ScenarioResult {
-        val selectPpse = ApduBuilder.buildSelect(EmvConstants.PPSE_AID)
-        val (ppseResp, _) = transceive(isoDep, selectPpse, "SELECT PPSE")
-        val aid = extractAidFromPpse(ppseResp) ?: EmvConstants.MASTERCARD_AID
+        val aid = resolveTargetAid(isoDep, scenario)
+            ?: return ScenarioResult.TerminalDecline("Failed to resolve target AID")
 
         val selectAid = ApduBuilder.buildSelect(aid)
-        transceive(isoDep, selectAid, "SELECT AID")
+        transceive(isoDep, selectAid, "SELECT AID (${HexUtil.toHex(aid)})")
 
-        // Simulate Generate AC requesting AAC (Application Authentication Cryptogram - 00h)
+        // Request AAC Decline
         val generateAcAac = byteArrayOf(
             0x80.toByte(), 0xAE.toByte(), 0x00.toByte(), 0x00.toByte(),
             0x00.toByte() // Le
         )
         transceive(isoDep, generateAcAac, "GENERATE AC (Request AAC Decline)")
 
-        return ScenarioResult.CardDecline("Card / Terminal generated AAC Cryptogram (Declined)")
+        return ScenarioResult.CardDecline("Card / Terminal generated AAC Cryptogram (Declined) on AID ${HexUtil.toHex(aid)}")
     }
 
     private suspend fun executeRfTear(
         isoDep: IsoDep,
         scenario: PosScenario
     ): ScenarioResult {
-        val selectPpse = ApduBuilder.buildSelect(EmvConstants.PPSE_AID)
-        transceive(isoDep, selectPpse, "SELECT PPSE")
-
-        // Abruptly close connection before proceeding
+        resolveTargetAid(isoDep, scenario)
         isoDep.close()
         onLog(
             ApduLogEntry(
@@ -190,9 +197,7 @@ class ScenarioExecutor(
         isoDep: IsoDep,
         scenario: PosScenario
     ): ScenarioResult {
-        val selectPpse = ApduBuilder.buildSelect(EmvConstants.PPSE_AID)
-        transceive(isoDep, selectPpse, "SELECT PPSE")
-
+        resolveTargetAid(isoDep, scenario)
         onLog(
             ApduLogEntry(
                 direction = ApduDirection.COMMAND,
@@ -200,7 +205,6 @@ class ScenarioExecutor(
                 rawBytes = byteArrayOf()
             )
         )
-        // Hold field open and delay
         delay(5000L)
         isoDep.close()
 

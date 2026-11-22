@@ -98,6 +98,8 @@ fun PosEmulatorApp(
 fun ScenarioSelectionScreen(
     onSelectScenario: (PosScenario) -> Unit
 ) {
+    var selectedScheme by remember { mutableStateOf(com.sergitorralba.nfcemulator.domain.model.TargetCardScheme.AUTO_PPSE) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -107,14 +109,31 @@ fun ScenarioSelectionScreen(
             text = "Select Payment Scenario",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp)
+            modifier = Modifier.padding(bottom = 4.dp)
         )
         Text(
-            text = "Arm the POS with a scenario before tapping the wallet device.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 16.dp)
+            text = "Target Card Profile:",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+
+        // Scheme Selector Chips (AUTO, WISE / CPACE, Visa, Mastercard)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            com.sergitorralba.nfcemulator.domain.model.TargetCardScheme.entries.forEach { scheme ->
+                FilterChip(
+                    selected = selectedScheme == scheme,
+                    onClick = { selectedScheme = scheme },
+                    label = { Text(scheme.title, fontSize = 12.sp) }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -122,8 +141,8 @@ fun ScenarioSelectionScreen(
         ) {
             items(ScenarioType.entries.toTypedArray()) { scenarioType ->
                 ScenarioCard(
-                    scenario = PosScenario(type = scenarioType),
-                    onClick = { onSelectScenario(PosScenario(type = scenarioType)) }
+                    scenario = PosScenario(type = scenarioType, scheme = selectedScheme),
+                    onClick = { onSelectScenario(PosScenario(type = scenarioType, scheme = selectedScheme)) }
                 )
             }
         }
