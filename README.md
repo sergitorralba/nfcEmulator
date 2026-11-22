@@ -1,0 +1,34 @@
+# NFC POS Terminal Emulator (`nfcEmulator`)
+
+A developer tool and Android application designed to emulate an EMV Point-of-Sale (POS) contactless reader. Built to thoroughly test NFC mobile wallets (Apple Pay, Google Wallet, custom HCE wallets) across realistic terminal scenarios, step-ups, declines, and failure recovery.
+
+## ✨ Features
+
+- **Standard Contactless EMV Engine**: Implements ISO/IEC 7816-4 APDU commands, PPSE selection (`2PAY.SYS.DDF01`), AID negotiation (Visa, Mastercard), and GPO (`GET PROCESSING OPTIONS`).
+- **One-Tap Test Scenarios**:
+  1. **Standard Approval**: Normal contactless payment with online cryptogram request (`9000`).
+  2. **Approval with CDCVM**: Signals Terminal Transaction Qualifiers (TTQ) requiring Consumer Device Cardholder Verification Method (biometric unlock / device passcode).
+  3. **"See Phone" Step-Up**: Simulates terminal instructing the cardholder to verify their identity on their phone and re-tap.
+  4. **Terminal Decline (`6985`)**: Terminal aborts with Status Word `69 85` (Conditions of use not satisfied).
+  5. **Cryptogram Decline (`AAC`)**: Generates an Application Authentication Cryptogram (AAC) decline.
+  6. **Simulated RF Tear**: Prematurely drops the connection mid-flight (`isoDep.close()`) to test wallet resilience to tap-and-pull edge cases.
+  7. **Terminal Stall / Timeout**: Holds the RF field open with an artificial delay to test wallet timeout handling.
+  8. **Unsupported Card**: Refuses the credential with `6A 82` (Application not found).
+- **Fail-Safe Testing UX**:
+  - Direct controls for **"Restart Tap Session"** and **"Cancel / Back to Menu"** so an unstable wallet build never locks up the testing device.
+- **Raw APDU Hex Inspector**:
+  - Live modal sheet showing every command and response APDU byte array and status words for debugging.
+
+## 🛠 Tech Stack
+
+- **Platform**: Android (`minSdk 26`, `compileSdk 34`)
+- **Language**: Kotlin 2.0+
+- **UI**: Jetpack Compose + Material 3
+- **NFC Engine**: `NfcAdapter.enableReaderMode` + `IsoDep.transceive()`
+- **Architecture**: Clean Architecture + MVI (`PosViewModel` $\to$ `NfcTerminalManager` $\to$ `ScenarioExecutor`)
+
+## 🚀 Getting Started
+
+1. Open this project in **Android Studio Ladybug (or newer)**.
+2. Ensure you run this app on a **physical Android device with NFC hardware**.
+3. Open the app, select any scenario from the home screen, and hold your wallet device against the back of the phone.
