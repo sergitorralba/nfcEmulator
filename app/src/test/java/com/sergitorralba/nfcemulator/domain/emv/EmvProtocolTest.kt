@@ -61,4 +61,28 @@ class EmvProtocolTest {
         assertEquals(0, (ttqNoCvm[0].toInt() and 0x02))
         assertNotEquals(0, (ttqWithCvm[0].toInt() and 0x02))
     }
+
+    @Test
+    fun testWiseCpaceAids() {
+        val cpaceDebitHex = HexUtil.toHex(EmvConstants.CPACE_DEBIT_AID)
+        val cpaceCreditHex = HexUtil.toHex(EmvConstants.CPACE_CREDIT_AID)
+        val wlaDomesticHex = HexUtil.toHex(EmvConstants.WLA_DOMESTIC_AID)
+
+        assertEquals("A0000008430101", cpaceDebitHex)
+        assertEquals("A0000008430201", cpaceCreditHex)
+        assertEquals("A0000008580101", wlaDomesticHex)
+    }
+
+    @Test
+    fun testTargetCardSchemeDefaults() {
+        val cpaceScheme = com.sergitorralba.nfcemulator.domain.model.TargetCardScheme.WISE_CPACE
+        val visaScheme = com.sergitorralba.nfcemulator.domain.model.TargetCardScheme.VISA
+        val mcScheme = com.sergitorralba.nfcemulator.domain.model.TargetCardScheme.MASTERCARD
+        val autoScheme = com.sergitorralba.nfcemulator.domain.model.TargetCardScheme.AUTO_PPSE
+
+        assertEquals("A0000008430101", cpaceScheme.defaultAidHex)
+        assertEquals("A0000000031010", visaScheme.defaultAidHex)
+        assertEquals("A0000000041010", mcScheme.defaultAidHex)
+        assertNull(autoScheme.defaultAidHex)
+    }
 }
