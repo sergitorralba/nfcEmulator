@@ -27,7 +27,6 @@ class ScenarioExecutor(
                 ScenarioType.DECLINE_AAC -> executeDeclineAac(isoDep, scenario)
                 ScenarioType.RF_TEAR -> executeRfTear(isoDep, scenario)
                 ScenarioType.STALLED_TIMEOUT -> executeStalledTimeout(isoDep, scenario)
-                ScenarioType.WISE_WLA_DIRECT_SELECT -> executeApproval(isoDep, scenario, requireCdcvm = false)
                 ScenarioType.UNSUPPORTED_CARD -> executeUnsupportedCard(isoDep, scenario)
             }
         } catch (e: Exception) {

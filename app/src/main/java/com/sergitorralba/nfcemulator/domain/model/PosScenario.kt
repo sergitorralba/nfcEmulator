@@ -29,10 +29,6 @@ enum class ScenarioType(val title: String, val description: String) {
         title = "Terminal Stall / Timeout",
         description = "Terminal halts communication mid-transaction without closing, testing wallet timeout handling."
     ),
-    WISE_WLA_DIRECT_SELECT(
-        title = "WISE / WLA (Direct AID)",
-        description = "Selects CPACE / White Label Alliance domestic AID directly without PPSE."
-    ),
     UNSUPPORTED_CARD(
         title = "Unsupported Card / AID",
         description = "Terminal rejects card with 6A82 (Application not found)."
