@@ -1,11 +1,14 @@
 package com.sergitorralba.nfcemulator.presentation.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,6 +24,7 @@ import com.sergitorralba.nfcemulator.domain.model.ApduLogEntry
 import com.sergitorralba.nfcemulator.domain.model.PosScenario
 import com.sergitorralba.nfcemulator.domain.model.ScenarioResult
 import com.sergitorralba.nfcemulator.domain.model.ScenarioType
+import com.sergitorralba.nfcemulator.domain.model.TargetCardScheme
 import com.sergitorralba.nfcemulator.presentation.PosUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -59,7 +63,11 @@ fun PosEmulatorApp(
         ) {
             when (uiState) {
                 is PosUiState.ScenarioSelection -> {
-                    ScenarioSelectionScreen(onSelectScenario = onSelectScenario)
+                    ScenarioSelectionScreen(
+                        isNfcAvailable = uiState.isNfcAvailable,
+                        isNfcEnabled = uiState.isNfcEnabled,
+                        onSelectScenario = onSelectScenario
+                    )
                 }
                 is PosUiState.WaitingForTap -> {
                     WaitingForTapScreen(
@@ -96,20 +104,61 @@ fun PosEmulatorApp(
 
 @Composable
 fun ScenarioSelectionScreen(
+    isNfcAvailable: Boolean,
+    isNfcEnabled: Boolean,
     onSelectScenario: (PosScenario) -> Unit
 ) {
-    var selectedScheme by remember { mutableStateOf(com.sergitorralba.nfcemulator.domain.model.TargetCardScheme.AUTO_PPSE) }
+    var selectedScheme by remember { mutableStateOf(TargetCardScheme.AUTO_PPSE) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
+        // Hardware Warning Banners
+        if (!isNfcAvailable) {
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+            ) {
+                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "No NFC hardware detected on this device.",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        } else if (!isNfcEnabled) {
+            Surface(
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+            ) {
+                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "NFC is turned OFF in Android settings.",
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+
         Text(
             text = "Select Payment Scenario",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 4.dp)
+            modifier = Modifier.padding(bottom = 2.dp)
         )
         Text(
             text = "Target Card Profile:",
@@ -117,18 +166,19 @@ fun ScenarioSelectionScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        // Scheme Selector Chips (AUTO, WISE / CPACE, Visa, Mastercard)
+        // Smooth horizontally scrollable chip row (never overflows or crushes text)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
                 .padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            com.sergitorralba.nfcemulator.domain.model.TargetCardScheme.entries.forEach { scheme ->
+            TargetCardScheme.entries.forEach { scheme ->
                 FilterChip(
                     selected = selectedScheme == scheme,
                     onClick = { selectedScheme = scheme },
-                    label = { Text(scheme.title, fontSize = 12.sp) }
+                    label = { Text(scheme.title, fontSize = 13.sp, maxLines = 1) }
                 )
             }
         }
@@ -220,7 +270,7 @@ fun WaitingForTapScreen(
                 modifier = Modifier.padding(bottom = 24.dp)
             ) {
                 Text(
-                    text = "ARMED: ${scenario.type.title}",
+                    text = "ARMED: ${scenario.type.title} (${scenario.scheme.title})",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -267,7 +317,7 @@ fun WaitingForTapScreen(
                 onClick = onCancel,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Default.ArrowBack, contentDescription = null)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Cancel / Back to Menu")
             }
@@ -409,7 +459,7 @@ fun CompletedScreen(
                 onClick = onBackToMenu,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Default.ArrowBack, contentDescription = null)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Back to Scenario Menu")
             }

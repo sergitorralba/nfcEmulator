@@ -13,7 +13,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 sealed interface PosUiState {
-    data object ScenarioSelection : PosUiState
+    data class ScenarioSelection(
+        val isNfcAvailable: Boolean = true,
+        val isNfcEnabled: Boolean = true
+    ) : PosUiState
     data class WaitingForTap(val scenario: PosScenario) : PosUiState
     data class Processing(val scenario: PosScenario, val progressMessage: String) : PosUiState
     data class Completed(
@@ -27,19 +30,18 @@ class PosViewModel : ViewModel() {
 
     private var terminalManager: NfcTerminalManager? = null
 
-    private val _uiState = MutableStateFlow<PosUiState>(PosUiState.ScenarioSelection)
+    private val _uiState = MutableStateFlow<PosUiState>(PosUiState.ScenarioSelection())
     val uiState: StateFlow<PosUiState> = _uiState.asStateFlow()
 
     private val _apduLogs = MutableStateFlow<List<ApduLogEntry>>(emptyList())
     val apduLogs: StateFlow<List<ApduLogEntry>> = _apduLogs.asStateFlow()
 
     fun bindTerminalManager(manager: NfcTerminalManager) {
-        if (this.terminalManager == null) {
-            this.terminalManager = manager
-            viewModelScope.launch {
-                manager.events.collect { event ->
-                    handleTerminalEvent(event)
-                }
+        this.terminalManager = manager
+        manager.checkNfcAvailability()
+        viewModelScope.launch {
+            manager.events.collect { event ->
+                handleTerminalEvent(event)
             }
         }
     }
@@ -66,11 +68,21 @@ class PosViewModel : ViewModel() {
 
     fun cancelAndReturnToMenu() {
         terminalManager?.stopReaderMode()
-        _uiState.value = PosUiState.ScenarioSelection
+        _uiState.value = PosUiState.ScenarioSelection()
+        terminalManager?.checkNfcAvailability()
     }
 
     private fun handleTerminalEvent(event: TerminalEvent) {
         when (event) {
+            is TerminalEvent.NfcStatus -> {
+                val current = _uiState.value
+                if (current is PosUiState.ScenarioSelection) {
+                    _uiState.value = current.copy(
+                        isNfcAvailable = event.isAvailable,
+                        isNfcEnabled = event.isEnabled
+                    )
+                }
+            }
             is TerminalEvent.Processing -> {
                 val currentScenario = when (val state = _uiState.value) {
                     is PosUiState.WaitingForTap -> state.scenario
@@ -108,6 +120,7 @@ class PosViewModel : ViewModel() {
     }
 
     fun onResume() {
+        terminalManager?.checkNfcAvailability()
         val state = _uiState.value
         if (state is PosUiState.WaitingForTap) {
             terminalManager?.startReaderMode(state.scenario)
@@ -116,6 +129,6 @@ class PosViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
-        terminalManager?.stopReaderMode()
+        terminalManager?.onDestroy()
     }
 }

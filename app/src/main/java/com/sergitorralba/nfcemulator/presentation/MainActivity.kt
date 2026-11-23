@@ -13,13 +13,14 @@ import com.sergitorralba.nfcemulator.presentation.ui.PosEmulatorApp
 class MainActivity : ComponentActivity() {
 
     private val viewModel: PosViewModel by viewModels()
-    private lateinit var nfcTerminalManager: NfcTerminalManager
+    private var nfcTerminalManager: NfcTerminalManager? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        nfcTerminalManager = NfcTerminalManager(this)
-        viewModel.bindTerminalManager(nfcTerminalManager)
+        val manager = NfcTerminalManager(this)
+        nfcTerminalManager = manager
+        viewModel.bindTerminalManager(manager)
 
         setContent {
             MaterialTheme {
@@ -43,7 +44,12 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onPause() {
-        super.onPause()
         viewModel.onPause()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        nfcTerminalManager?.onDestroy()
+        super.onDestroy()
     }
 }
