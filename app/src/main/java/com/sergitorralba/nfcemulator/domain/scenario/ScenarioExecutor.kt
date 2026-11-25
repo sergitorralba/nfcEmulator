@@ -111,14 +111,45 @@ class ScenarioExecutor(
         val gpoCommand = ApduBuilder.buildGpo(pdolData)
         val (gpoResp, gpoSw) = transceive(isoDep, gpoCommand, "GET PROCESSING OPTIONS (GPO)")
 
-        return if (gpoSw == EmvConstants.SW_SUCCESS) {
-            val amountFormatted = "$%.2f".format(scenario.amount / 100.0)
-            val cvmText = if (requireCdcvm) "with CDCVM" else "without CDCVM"
-            val schemeLabel = if (selectedAid.contentEquals(EmvConstants.CPACE_DEBIT_AID)) " [WISE/CPACE]" else ""
-            ScenarioResult.Success("Transaction Approved $amountFormatted ($cvmText)$schemeLabel")
-        } else {
-            ScenarioResult.CardDecline("Card rejected GPO with status: $gpoSw")
+        if (gpoSw != EmvConstants.SW_SUCCESS) {
+            return ScenarioResult.CardDecline("Card rejected GPO with status: $gpoSw")
         }
+
+        // 5. READ RECORD (guided by AFL in GPO response, or fallback read)
+        val aflBytes = extractTagValue(gpoResp, "94")
+        if (aflBytes != null && aflBytes.size >= 4) {
+            executeReadRecordsFromAfl(isoDep, aflBytes)
+        } else {
+            // Standard fallback read: SFI 1, Record 1
+            val readRecordCmd = ApduBuilder.buildReadRecord(sfi = 1, recordNumber = 1)
+            transceive(isoDep, readRecordCmd, "READ RECORD (SFI 1, Record 1)")
+        }
+
+        // 6. GENERATE AC (Requesting Transaction Certificate TC = 0x40 for Payment Approved)
+        val cdolData = ApduBuilder.buildDefaultPdolValues(
+            amount = scenario.amount,
+            currencyCodeHex = scenario.currencyCode,
+            requireCvm = requireCdcvm
+        )
+        val generateAcCmd = ApduBuilder.buildGenerateAc(cryptogramType = 0x40.toByte(), cdolData = cdolData)
+        transceive(isoDep, generateAcCmd, "GENERATE AC (Request TC - Payment Approved)")
+
+        // 7. EMV Contactless Completion: Terminal drops RF field (triggers wallet onDeactivated / checkmark)
+        try {
+            isoDep.close()
+            onLog(
+                ApduLogEntry(
+                    direction = ApduDirection.COMMAND,
+                    description = "[TERMINAL COMPLETION] Payment Approved. Terminal closed RF field.",
+                    rawBytes = byteArrayOf()
+                )
+            )
+        } catch (ignored: Exception) {}
+
+        val amountFormatted = "$%.2f".format(scenario.amount / 100.0)
+        val cvmText = if (requireCdcvm) "with CDCVM" else "without CDCVM"
+        val schemeLabel = if (selectedAid.contentEquals(EmvConstants.CPACE_DEBIT_AID)) " [WISE/CPACE]" else ""
+        return ScenarioResult.Success("Transaction Approved $amountFormatted ($cvmText)$schemeLabel")
     }
 
     private suspend fun executeSeePhoneStepUp(
@@ -248,6 +279,33 @@ class ScenarioExecutor(
         val (_, sw) = transceive(isoDep, selectUnknown, "SELECT UNKNOWN AID")
 
         return ScenarioResult.TerminalDecline("Unsupported Card / AID: response status $sw")
+    }
+
+    private fun extractTagValue(data: ByteArray, targetTagHex: String): ByteArray? {
+        val nodes = TlvParser.parse(data)
+        for (node in nodes) {
+            val found = node.findTag(targetTagHex)
+            if (found != null && found.value.isNotEmpty()) {
+                return found.value
+            }
+        }
+        return null
+    }
+
+    private fun executeReadRecordsFromAfl(isoDep: IsoDep, aflBytes: ByteArray) {
+        // AFL is composed of 4-byte entries: SFI(1B), FirstRecord(1B), LastRecord(1B), ODA(1B)
+        var i = 0
+        while (i + 3 < aflBytes.size) {
+            val sfi = (aflBytes[i].toInt() and 0xFF) ushr 3
+            val firstRecord = aflBytes[i + 1].toInt() and 0xFF
+            val lastRecord = aflBytes[i + 2].toInt() and 0xFF
+
+            for (recordNum in firstRecord..lastRecord) {
+                val readRecordCmd = ApduBuilder.buildReadRecord(sfi, recordNum)
+                transceive(isoDep, readRecordCmd, "READ RECORD (SFI $sfi, Record $recordNum)")
+            }
+            i += 4
+        }
     }
 
     private fun extractAidFromPpse(ppseResponse: ByteArray): ByteArray? {

@@ -99,6 +99,39 @@ object ApduBuilder {
         return ttq + amountBcd + amountOtherBcd + countryCode + tvr + currency + date + txType + unpredictableNum
     }
 
+    /**
+     * READ RECORD command (ISO 7816-4)
+     * CLA: 00 | INS: B2 | P1: Record Number | P2: (SFI << 3) | 04 | Le: 00
+     */
+    fun buildReadRecord(sfi: Int, recordNumber: Int): ByteArray {
+        val p2 = (sfi shl 3) or 0x04
+        return byteArrayOf(
+            0x00.toByte(),
+            0xB2.toByte(),
+            recordNumber.toByte(),
+            p2.toByte(),
+            0x00.toByte() // Le
+        )
+    }
+
+    /**
+     * GENERATE AC (Application Cryptogram) command (EMV Book 3)
+     * CLA: 80 | INS: AE | P1: Reference Control Parameter | P2: 00 | Lc | Data | Le: 00
+     * P1 values:
+     *   0x40: Transaction Certificate (TC) - Terminal approves transaction offline
+     *   0x80: Authorization Request Cryptogram (ARQC) - Terminal requests online approval
+     *   0x00: Application Authentication Cryptogram (AAC) - Terminal declines transaction
+     */
+    fun buildGenerateAc(
+        cryptogramType: Byte = 0x40.toByte(), // 0x40 = TC (Approved)
+        cdolData: ByteArray = ByteArray(29) { 0x00 }
+    ): ByteArray {
+        val header = byteArrayOf(0x80.toByte(), 0xAE.toByte(), cryptogramType, 0x00.toByte())
+        val lc = cdolData.size.toByte()
+        val le = 0x00.toByte()
+        return header + lc + cdolData + le
+    }
+
     private fun amountToBcd6Bytes(amount: Long): ByteArray {
         val str = "%012d".format(amount)
         val bcd = ByteArray(6)
